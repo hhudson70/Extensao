@@ -146,6 +146,10 @@ write.csv(SINASC_RN, "SINASC_RN.csv", row.names = FALSE)
 
 
 
+
+
+
+
 ##################################
 # ETAPA 2: BANCO DE DADOS DO SIM
 ##################################
@@ -282,6 +286,12 @@ write.csv(SIM_RN, "SIM_RN.csv", row.names = FALSE)
 
 
 
+
+
+
+
+
+
 #####################################################
 # ETAPA 3: OUTROS BANCOS DE DADOS: IBGE, SNIS, ...
 #####################################################
@@ -344,38 +354,143 @@ write.csv(SIDRA_UF, "SIDRA_UF.csv", row.names = FALSE)
 
 # Faça o commit com a mensagem "Script e dados TAREFA 3 - SIDRA"
 
+library(tidyverse)
+
+# Lendo o arquivo do SINISA com os nomes corrigidos
+sinisa_bruto <- read_csv("agua e esgoto - município - 2015.csv")
+
+# Filtrando os dados dos municípios do Rio Grande do Norte (Código IBGE inicia com 24)
+# Criando as colunas ANO e NIVEL exigidas pelo esqueleto
+SINISA_UF <- sinisa_bruto %>%
+  filter(str_starts(as.character(CODMUNRES), "24")) %>%
+  mutate(
+    ANO = 2015,
+    NIVEL = "MUNICIPIO"
+  ) %>%
+  select(ANO, NIVEL, CODMUNRES, POPR_RA, POPR_RE)
+
+# Exporte o arquivo em formato CSV
+write_csv(SINISA_UF, "SINISA_UF.csv")
+
+# Faça o commit com a mensagem "Script e dados TAREFA 3 - SINISA"
+# Comandos Git:
+# git add SINISA_UF.csv
+# git commit -m "Script e dados TAREFA 3 - SINISA"
 
 
-################################################################
-# ETAPA 4: GERAR BANCO DE DADOS FINAL DO ESTADO COM DADOS DO SIDRA, ATLAS, SINASC, SIM, SINISA E INDICADORES
-################################################################
+# Tarefa 3: Acesso aos bancos de dados do ATLAS  e obtenção da informação
+# Escreva os comandos da Tarefa 3 estando na branch OUTROS
+# Leia os arquivos:
+# 1. códigos dos municípios - 2010.csv      
+# 2. IDHM - 2010 (CENSO) e 2015 (PNAD) - total e por sexo - UF - Atlas Brasil.csv
+# 3. IDHM - 2010 - municípios - Atlas Brasil.csv
+
+# Lendo as tabelas originais fornecidas com os nomes corretos
+cod_municipios <- read_csv("códigos dos municípios - 2010.csv")
+idhm_uf_bruto  <- read_csv("IDHM - 2010 (CENSO) e 2015 (PNAD) - total e por sexo - UF - Atlas Brasil.csv")
+idhm_mun_bruto <- read_csv("IDHM - 2010 - municípios - Atlas Brasil.csv")
+
+### 1. Processando Nível Estadual (UF) para 2015 (PNAD)
+idhm_uf_rn <- idhm_uf_bruto %>%
+  filter(UF == "Rio Grande do Norte") %>%
+  mutate(
+    ANO = 2015,
+    NIVEL = "UF",
+    CODMUNRES = 24,
+    IDHM_A = as.numeric(str_replace(IDHM_2015, ",", ".")),
+    IDHM_CA = as.numeric(str_replace(IDHM_2015, ",", ".")),
+    IDHM_CA_M = as.numeric(str_replace(IDHM_2015_M, ",", ".")),
+    IDHM_CA_F = as.numeric(str_replace(IDHM_2015_F, ",", "."))
+  ) %>%
+  select(ANO, NIVEL, CODMUNRES, IDHM_A, IDHM_CA, IDHM_CA_M, IDHM_CA_F)
+
+### 2. Processando Nível Municipal (MUNICIPIO)
+# Como a tabela municipal não possui CODMUNRES, limpamos o texto "(RN)" para cruzar com a tabela de códigos.
+idhm_mun_tratado <- idhm_mun_bruto %>%
+  filter(str_detect(município, "\\(RN\\)")) %>%
+  mutate(nome_limpo = str_trim(str_remove(município, "\\(RN\\)")))
+
+cod_municipios_rn <- cod_municipios %>%
+  filter(str_starts(as.character(CODMUNRES), "24"))
+
+idhm_mun_rn <- idhm_mun_tratado %>%
+  left_join(cod_municipios_rn, by = c("nome_limpo" = "município")) %>%
+  mutate(
+    ANO = 2015, 
+    NIVEL = "MUNICIPIO",
+    IDHM_A = as.numeric(str_replace(IDHM_2010, ",", ".")),
+    IDHM_CA = as.numeric(str_replace(IDHM_2010, ",", ".")),
+    IDHM_CA_M = NA_real_, 
+    IDHM_CA_F = NA_real_  
+  ) %>%
+  filter(!is.na(CODMUNRES)) %>%
+  select(ANO, NIVEL, CODMUNRES, IDHM_A, IDHM_CA, IDHM_CA_M, IDHM_CA_F)
+
+### 3. Consolidando o banco de dados ATLAS_UF exigido
+ATLAS_UF <- bind_rows(idhm_uf_rn, idhm_mun_rn)
+
+
+# >>> CORREÇÃO AQUI: Criando o 'ATLAS_RN' com os códigos de 6 dígitos
+ATLAS_RN <- ATLAS_UF %>%
+  mutate(
+    CODMUNRES = as.character(CODMUNRES),
+    CODMUNRES = if_else(nchar(CODMUNRES) == 7, str_sub(CODMUNRES, 1, 6), CODMUNRES)
+  )
+
+# Exporte o arquivo final corrigido em formato CSV com o novo nome
+write_csv(ATLAS_RN, "ATLAS_RN.csv")
+
+
+
+
+
+
+
+# Faça o commit com a mensagem "Script e dados TAREFA 3 - ATLAS"
+# Comandos Git:
+# git add ATLAS_UF.csv
+# git commit -m "Script e dados TAREFA 3 - ATLAS"
 
 library(dplyr)
 
-# Carregando os bancos de dados criados nas etapas anteriores (ajustados para o RN)
-SIDRA_UF  <- read.csv("SIDRA_RN.csv", colClasses = c("CODMUNRES" = "character"))
-ATLAS_UF  <- read.csv("ATLAS_RN.csv", colClasses = c("CODMUNRES" = "character"))
-SINASC_UF <- read.csv("SINASC_RN.csv", colClasses = c("CODMUNRES" = "character"))
-SIM_UF    <- read.csv("SIM_RN.csv", colClasses = c("CODMUNRES" = "character"))
-SINISA_UF <- read.csv("SINISA_RN.csv", colClasses = c("CODMUNRES" = "character"))
+# ==============================================================
+# ETAPA 4: GERAR BANCO DE DADOS FINAL (BDEM_RN_2015)
+# ==============================================================
 
-# Tarefa 1: Fazer o merge dos bancos de dados criados nas etapas anteriores (SIDRA_UF, ATLAS_ UF,  SINASC_UF, SIM_UF e SINISA_UF), 
-# sendo que as variáveis deverão seguir a ordem
+# Tarefa 1: Carregando e padronizando os bancos de dados criados (ajustados para o RN)
+# Nota: Corrigido os nomes dos arquivos para bater exatamente com os que estão na sua pasta (.csv)
+# e adicionado mutate para garantir a existência de ANO e NIVEL para o join perfeito.
 
-# ANO, NIVEL, CODMUNRES (uma única vez), variáveis do SIDRA, do ATLAS, do SINASC, do SIM e da SINISA. No merge deve constar qualquer município que esteja em pelo menos um dos bancos
-# Chamar o banco de dados de DA_UF
+SIDRA_UF  <- read.csv("SIDRA_RN.csv", colClasses = c("CODMUNRES" = "character")) %>%
+  mutate(ANO = 2015, NIVEL = as.character(NIVEL))
 
+ATLAS_UF  <- read.csv("ATLAS_RN.csv", colClasses = c("CODMUNRES" = "character")) %>%
+  mutate(ANO = 2015, NIVEL = as.character(NIVEL))
+
+SINASC_UF <- read.csv("SINASC_RN.csv", colClasses = c("CODMUNRES" = "character")) %>%
+  mutate(ANO = 2015, NIVEL = as.character(NIVEL))
+
+SIM_UF    <- read.csv("SIM_RN.csv", colClasses = c("CODMUNRES" = "character")) %>%
+  mutate(ANO = 2015, NIVEL = "MUNICIPIO") # Força a criação das chaves se sumiram no summarize
+
+SINISA_UF <- read.csv("SINISA_RN.csv", colClasses = c("CODMUNRES" = "character")) %>%
+  mutate(ANO = 2015, NIVEL = "MUNICIPIO") # Força a criação das chaves se sumiram no summarize
+
+
+# Fazer o merge dos bancos de dados criados (Qualquer município em pelo menos um dos bancos)
 DA_UF <- SIDRA_UF %>%
   full_join(ATLAS_UF,  by = c("ANO", "NIVEL", "CODMUNRES")) %>%
   full_join(SINASC_UF, by = c("ANO", "NIVEL", "CODMUNRES")) %>%
   full_join(SIM_UF,    by = c("ANO", "NIVEL", "CODMUNRES")) %>%
   full_join(SINISA_UF, by = c("ANO", "NIVEL", "CODMUNRES"))
 
-# Após o merge dos bancos, fazer commit “Script e dados agregados da UF”
+# Ajuste manual para a linha que representa o Estado do RN consolidado (se houver)
+DA_UF$NIVEL[DA_UF$CODMUNRES == "24"] <- "UF"
+
+# [Neste ponto, faça o commit: “Script e dados agregados da UF”]
 
 
-# Tarefa 2: Acrescentar no banco DA_UF os indicadores TFG, TMG, RMM, TMM, TMM_P, TMN, TMN_P, TMN_T e TMI e chamar o banco de BDEM_UF_2015
-
+# Tarefa 2: Acrescentar no banco DA_UF os indicadores demográficos e de mortalidade
 BDEM_RN_2015 <- DA_UF %>%
   mutate(
     # Indicadores Demográficos e de Mortalidade Geral/Materna
@@ -392,11 +507,9 @@ BDEM_RN_2015 <- DA_UF %>%
     TMI   = ((TO_NT + TO_PNT) / TN) * 1000
   )
 
-# Após a criação do banco, fazer commit “Script e dados BDEM_UF_2015”
+# [Neste ponto, fazer commit: “Script e dados BDEM_UF_2015”]
 
 # Exporte o arquivo em formato CSV
 write.csv(BDEM_RN_2015, "BDEM_RN_2015.csv", row.names = FALSE)
 
-# Faça o commit com a mensagem "Script e dados TAREFA 3 - ATLAS"
-
-
+# [Por fim, faça o commit com a mensagem: "Script e dados TAREFA 3 - ATLAS"]
